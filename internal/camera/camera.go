@@ -3,41 +3,60 @@ package camera
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"strings"
+	"time"
 )
 
-type CodeService interface {
+type codeService interface {
 	AddCode(code string) error
 	GetCodeByPayload(payload string) ([]byte, error)
 }
 
 type Camera struct {
-	client  net.Conn
-	service CodeService
+	Log         *slog.Logger
+	client      net.Conn
+	service     codeService
+	address     string
+	isConnected bool
 }
 
-func NewCamera(address string, service CodeService) (*Camera, error) {
-	op := "camera.NewCamera"
+func NewCamera(address string, service codeService) (*Camera, error) {
+	// ...
+	return &Camera{address: address, service: service}, nil
+}
 
-	conn, err := net.Dial("tcp4", address)
+func (c *Camera) connect() error {
+	conn, err := net.Dial("tcp4", c.address)
 	if err != nil {
-		return nil, fmt.Errorf("%s, %w", op, err)
+		return err
 	}
-	return &Camera{client: conn, service: service}, nil
+	c.client = conn
+	c.isConnected = true
+	return nil
 }
 
 func (c *Camera) StartListening() {
-	reader := bufio.NewReader(c.client)
 	for {
+		if !c.isConnected {
+			err := c.connect()
+			if err != nil {
+				c.Log.Info("failed to connect to camera", slog.String("error", err.Error()))
+				time.Sleep(10 * time.Second) // wait before retrying
+				continue
+			}
+		}
+
+		reader := bufio.NewReader(c.client)
 		data, err := reader.ReadString('\r')
 		if err != nil {
-			log.Println("Ошибка чтения данных:", err)
-			break
+			c.Log.Info("failed to read from camera", slog.String("error", err.Error()))
+			c.isConnected = false
+			continue
 		}
-		result := strings.Trim(data, "\r")
 
+		result := strings.Trim(data, "\r")
 		if err := c.service.AddCode(result); err != nil {
 			fmt.Printf("failed to add code to storage: %v\n", err)
 		}
@@ -45,5 +64,8 @@ func (c *Camera) StartListening() {
 }
 
 func (c *Camera) Close() {
-	c.client.Close()
+	if c.client != nil {
+		c.client.Close()
+	}
+	c.isConnected = false
 }
