@@ -1,3 +1,4 @@
 package storage
 
-var ErrCodeExists = "exists"
+var ErrCodeExists = "code already exists"
+var ErrCodeNotFound = "code not found"
