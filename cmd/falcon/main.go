@@ -1,36 +1,76 @@
 package main
 
 import (
-	"falcon/internal/camera"
-	"falcon/internal/service/code"
-	"falcon/internal/storage/sqlite"
-	"log"
+	"context"
+	"falcon/internal/app"
+	"falcon/internal/config"
+	"falcon/internal/lib/logger/handlers/slogpretty"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+const (
+	envLocal = "local"
+	envDev   = "dev"
+	envProd  = "prod"
 )
 
 func main() {
-	log.Println("Initializing Falcon...")
-	log.Println("Loading storage...")
-	storage, err := sqlite.New("./storage/falcon.db")
-	if err != nil {
-		panic(err)
+	ctx := context.WithoutCancel(context.Background())
+
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	cfg := config.MustLoad()
+	log := setupLogger(cfg.Env)
+
+	go func() {
+		<-shutdownChan
+		log.Info("app.Shutdown")
+		os.Exit(0)
+	}()
+
+	scorpion := app.NewApp(cfg, log)
+	log.Info("app.Run", slog.String("env", cfg.Env))
+	if err := scorpion.Run(); err != nil {
+		log.Error("app.Run: %w", err)
+		os.Exit(1)
 	}
-	log.Println("Loading service...")
-	srv := code.NewCodeService(storage)
-	log.Println("Loading camera...")
-	cam, err := camera.NewCamera("192.168.252.37:2003", srv)
-	if err != nil {
-		panic(err)
+	<-ctx.Done()
+	scorpion.Stop()
 
+}
+
+func setupLogger(env string) *slog.Logger {
+	var log *slog.Logger
+
+	switch env {
+	case envLocal:
+		log = setupPrettySlog()
+	case envDev:
+		log = slog.New(slog.NewJSONHandler(os.Stdout,
+			&slog.HandlerOptions{
+				Level: slog.LevelDebug,
+			}))
+	case envProd:
+		log = slog.New(slog.NewJSONHandler(os.Stdout,
+			&slog.HandlerOptions{
+				Level: slog.LevelInfo,
+			}))
 	}
-	log.Println("Starting camera...")
-	cam.StartListening()
-	defer cam.Close()
 
-	//TODO: init logger
+	return log
+}
 
-	//TODO: init config
+func setupPrettySlog() *slog.Logger {
+	opts := slogpretty.PrettyHandlerOptions{
+		SlogOpts: &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		},
+	}
+	handler := opts.NewPrettyHandler(os.Stdout)
 
-	//TODO: init app
-
-	//TODO: Run app
+	return slog.New(handler)
 }

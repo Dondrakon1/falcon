@@ -4,17 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"falcon/internal/storage"
+	"falcon/internal/storage/models"
 	"fmt"
 	"github.com/mattn/go-sqlite3"
-	"time"
 )
-
-// Code представляет собой структуру для хранения информации о коде в базе данных.
-type Code struct {
-	ID        int64     `json:"id"`
-	Payload   string    `json:"payload"`
-	CreatedAt time.Time `json:"created_at"`
-}
 
 func (s *Storage) AddCode(code string) error {
 	op := "sqlite.Storage.AddCode"
@@ -39,10 +32,10 @@ func (s *Storage) AddCode(code string) error {
 	return nil
 }
 
-func (s *Storage) GetCodeByPayload(payload string) (*Code, error) {
+func (s *Storage) GetCodeByPayload(payload string) (*models.Code, error) {
 	op := "sqlite.Storage.GetCodeByPayload"
 
-	var code Code
+	var code models.Code
 
 	stmt, err := s.Db.Prepare("SELECT id, payload, created_at FROM codes WHERE payload = ?")
 	if err != nil {

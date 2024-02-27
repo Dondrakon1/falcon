@@ -1,0 +1,4 @@
+env: "local"
+storagePath: "postgresql://colibriuser:colibripassword@localhost:5432/colibriCRM?sslmode=disable"
+camera: "192.168.252.105:2001"
+
